@@ -1,0 +1,5 @@
+package <https://www.dolfin.fr/showcase/high-school>:
+  dolfin_version "1"
+  version "1.0.0"
+  author "Dolfin Team"
+  description@en "A french Lycée: teachers, students, classes and half-class groups, rooms and the weekly timetable"
