@@ -1,0 +1,249 @@
+# A French lycée, read from the CSV files in data/.
+#
+# data/timetable.csv ends with five deliberate mistakes, L034 to L038, that
+# the rules at the bottom of this file catch:
+#   L034 + L035  two classes in room R101 on Tuesday, period 3   -> RoomClash
+#   L036         a French teacher teaching mathematics           -> UnqualifiedTeacher
+#   L037         physics-chemistry for the whole of 2B           -> SplitSubjectForWholeClass
+#   L038         mathematics in a lab                            -> WrongRoomKind
+
+prefix <https://www.dolfin.fr/showcase/high-school/school#> as hs
+
+concept RoomKind:
+  one of:
+    Classroom
+    Lab
+    Gym
+
+concept Day:
+  one of:
+    Monday
+    Tuesday
+    Wednesday
+    Thursday
+    Friday
+
+concept Subject:
+  has key code: string
+  has name: one string
+
+  # Taught to half a class at a time (lab work)
+  has split: one boolean
+  has roomKind: one RoomKind
+
+concept Teacher:
+  has key teacherId: string
+  has firstName: one string
+  has lastName: one string
+  has teaches: some Subject
+
+concept Room:
+  has key code: string
+  has name: one string
+  has kind: one RoomKind
+  has capacity: one int
+
+# Who a lesson is given to: a whole class, or half of one.
+concept StudentGroup:
+  has key code: string
+
+concept SchoolClass:
+  sub StudentGroup
+  has name: one string
+  has level: one string
+
+concept HalfGroup:
+  sub StudentGroup
+  has halfOf: one SchoolClass
+
+concept Student:
+  has key studentId: string
+  has firstName: one string
+  has lastName: one string
+  has birthDate: one date
+  has inClass: one SchoolClass
+  has inGroup: one HalfGroup
+
+# A period of the weekly timetable.
+concept Slot:
+  has key day: Day
+  has key period: int
+
+concept Lesson:
+  has key lessonId: string
+  has slot: one Slot
+  has audience: one StudentGroup
+  has subject: one Subject
+  has teacher: one Teacher
+  has room: one Room
+
+# Problems in the timetable, inferred by the rules below.
+concept RoomClash:
+  sub Lesson
+
+concept TeacherClash:
+  sub Lesson
+
+concept UnqualifiedTeacher:
+  sub Lesson
+
+concept SplitSubjectForWholeClass:
+  sub Lesson
+
+concept WrongRoomKind:
+  sub Lesson
+
+mapping from <package://data/subjects.csv> as CSV
+  map:
+    code      as ?code
+    name      as ?name
+    split     as ?split
+    room_kind as ?kind
+  to:
+    fact hs:subject_{?code} a Subject
+      code {?code}
+      name {?name}
+      split case ?split:
+        "yes" -> true
+        "no" -> false
+      roomKind case ?kind:
+        "Classroom" -> Classroom
+        "Lab" -> Lab
+        "Gym" -> Gym
+
+# One row per subject a teacher is qualified for.
+mapping from <package://data/teachers.csv> as CSV
+  map:
+    id         as ?id
+    first_name as ?first
+    last_name  as ?last
+    subject    as ?subject
+  to:
+    fact hs:teacher_{?id} a Teacher
+      teacherId {?id}
+      firstName {?first}
+      lastName {?last}
+      teaches hs:subject_{?subject}
+
+mapping from <package://data/rooms.csv> as CSV
+  map:
+    code     as ?code
+    name     as ?name
+    kind     as ?kind
+    capacity as ?capacity
+  to:
+    fact hs:room_{?code} a Room
+      code {?code}
+      name {?name}
+      kind case ?kind:
+        "Classroom" -> Classroom
+        "Lab" -> Lab
+        "Gym" -> Gym
+      capacity {?capacity} as int
+
+mapping from <package://data/classes.csv> as CSV
+  map:
+    code  as ?code
+    name  as ?name
+    level as ?level
+  to:
+    fact hs:group_{slug(?code)} a SchoolClass
+      code {?code}
+      name {?name}
+      level {?level}
+
+# The half groups are not listed anywhere: each student row names theirs.
+mapping from <package://data/students.csv> as CSV
+  map:
+    id         as ?id
+    first_name as ?first
+    last_name  as ?last
+    birth_date as ?birth
+    class      as ?class
+    half_group as ?half
+  to:
+    fact hs:student_{?id} a Student
+      studentId {?id}
+      firstName {?first}
+      lastName {?last}
+      birthDate {?birth} as date
+      inClass hs:group_{slug(?class)}
+      inGroup hs:group_{slug(?half)}
+    fact hs:group_{slug(?half)} a HalfGroup
+      code {?half}
+      halfOf hs:group_{slug(?class)}
+
+mapping from <package://data/timetable.csv> as CSV
+  map:
+    id       as ?id
+    day      as ?day
+    period   as ?period
+    audience as ?audience
+    subject  as ?subject
+    teacher  as ?teacher
+    room     as ?room
+  to:
+    fact hs:slot_{slug(?day)}{?period} a Slot
+      day case ?day:
+        "Monday" -> Monday
+        "Tuesday" -> Tuesday
+        "Wednesday" -> Wednesday
+        "Thursday" -> Thursday
+        "Friday" -> Friday
+      period {?period} as int
+    fact hs:lesson_{?id} a Lesson
+      lessonId {?id}
+      slot hs:slot_{slug(?day)}{?period}
+      audience hs:group_{slug(?audience)}
+      subject hs:subject_{?subject}
+      teacher hs:teacher_{?teacher}
+      room hs:room_{?room}
+
+# Two lessons in the same room at the same time.
+rule room_clash:
+  match:
+    ?a slot ?s
+    ?a room ?r
+    ?a lessonId ?ida
+    ?b slot ?s
+    ?b room ?r
+    ?b lessonId [ != ?ida ]
+  then:
+    ?a a RoomClash
+
+# One teacher in two lessons at the same time.
+rule teacher_clash:
+  match:
+    ?a slot ?s
+    ?a teacher ?t
+    ?a lessonId ?ida
+    ?b slot ?s
+    ?b teacher ?t
+    ?b lessonId [ != ?ida ]
+  then:
+    ?a a TeacherClash
+
+# The teacher is not qualified for the lesson's subject.
+rule unqualified_teacher:
+  match:
+    ?l subject ?subject
+    none ?t:
+      ?l teacher ?t
+      ?t teaches ?subject
+  then:
+    ?l a UnqualifiedTeacher
+
+# Lab subjects are taught in half groups, never to a whole class.
+rule split_subject_for_whole_class:
+  match:
+    ?l subject [ split true ]
+    ?l audience [ a SchoolClass ]
+  then:
+    ?l a SplitSubjectForWholeClass
+
+rule wrong_room_kind:
+  match:
+    ?l subject [ roomKind ?wanted ]
+    ?l room [ kind [ != ?wanted ] ]
+  then:
+    ?l a WrongRoomKind

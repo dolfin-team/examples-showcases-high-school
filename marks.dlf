@@ -1,0 +1,104 @@
+# The term's tests and marks, read from the Excel gradebook data/marks.xlsx.
+# The workbook was written once by generate_marks.py; this package only reads it.
+#
+# French marks are out of 20. A student who missed a test has "ABS" in the
+# mark column: that is an Absence, which has no mark at all, so it never
+# drags an average down the way a 0 would.
+
+prefix <https://www.dolfin.fr/showcase/high-school/school#> as hs
+
+concept Test:
+  has key testId: string
+  has takenOn: one date
+  has forClass: one school.SchoolClass
+  has subject: one school.Subject
+  has title: one string
+
+# One student's outcome at one test.
+concept TestResult:
+  has key test: Test
+  has key student: school.Student
+  has mark: optional float
+
+# Missed the test: a TestResult without a mark.
+concept Absence:
+  sub TestResult
+
+# Inferred by the rules below.
+concept FailingResult:
+  sub TestResult
+
+concept InvalidMark:
+  sub TestResult
+
+concept ResultOutsideClass:
+  sub TestResult
+
+mapping from <package://data/marks.xlsx> as XLSX
+  sheet "Tests"
+  map:
+    test_id as ?id
+    "date"  as ?date
+    class   as ?class
+    subject as ?subject
+    title   as ?title
+  to:
+    fact hs:test_{?id} a Test
+      testId {?id}
+      takenOn {?date} as date
+      forClass hs:group_{slug(?class)}
+      subject hs:subject_{?subject}
+      title {?title}
+
+# The Marks sheet has a title banner: the table starts on row 3.
+mapping from <package://data/marks.xlsx> as XLSX
+  sheet "Marks"
+  header row 3
+  map:
+    test_id    as ?test
+    student_id as ?student
+    mark       as ?mark
+  where:
+    ?mark [ != "ABS" ]
+  to:
+    fact hs:result_{?test}{?student} a TestResult
+      test hs:test_{?test}
+      student hs:student_{?student}
+      mark {?mark} as float
+
+mapping from <package://data/marks.xlsx> as XLSX
+  sheet "Marks"
+  header row 3
+  map:
+    test_id    as ?test
+    student_id as ?student
+    mark       as ?mark
+  where:
+    ?mark [ = "ABS" ]
+  to:
+    fact hs:result_{?test}{?student} a Absence
+      test hs:test_{?test}
+      student hs:student_{?student}
+
+rule failing_result:
+  match:
+    ?r mark [ < 10.0 ]
+  then:
+    ?r a FailingResult
+
+# A typo in the gradebook: marks are out of 20.
+rule invalid_mark:
+  match:
+    ?r mark [ > 20.0 ]
+  then:
+    ?r a InvalidMark
+
+# A mark for a student who is not in the class that took the test.
+rule result_outside_class:
+  match:
+    ?r test [ forClass ?class ]
+    none ?s:
+      ?r student ?s
+      ?s inClass ?class
+  then:
+    ?r a ResultOutsideClass

@@ -1,0 +1,7 @@
+code,name,kind,capacity
+R101,Salle 101,Classroom,35
+R102,Salle 102,Classroom,35
+R103,Salle 103,Classroom,35
+LAB1,Laboratoire 1,Lab,18
+LAB2,Laboratoire 2,Lab,18
+GYM,Gymnase,Gym,60

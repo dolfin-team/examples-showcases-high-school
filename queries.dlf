@@ -1,0 +1,37 @@
+# Term averages per student and subject. Absences have no mark, so they are
+# left out of the average instead of counting as 0.
+query term_averages:
+  ?s a school.Student
+    lastName ?last
+    firstName ?first
+    inClass [ code ?class ]
+  ?subj a school.Subject
+    name ?subject
+  average ?mark as ?average
+    ?r student ?s
+    ?r mark ?mark
+    ?r test [ subject ?subj ]
+  return
+    ?class
+      order asc
+    ?last
+      order asc
+    ?first
+    ?subject
+      order asc
+    ?average
+
+query absences_per_student:
+  ?s a school.Student
+    lastName ?last
+    firstName ?first
+    inClass [ code ?class ]
+  count ?r as ?absences
+    ?r a marks.Absence
+    ?r student ?s
+  return
+    ?absences
+      order desc
+    ?class
+    ?last
+    ?first

@@ -1,0 +1,8 @@
+code,name,split,room_kind
+MATH,Mathématiques,no,Classroom
+FRENCH,Français,no,Classroom
+HISTGEO,Histoire-Géographie,no,Classroom
+ENGLISH,Anglais,no,Classroom
+PHYSCHEM,Physique-Chimie,yes,Lab
+BIOLOGY,Sciences de la vie et de la Terre,yes,Lab
+PE,Éducation physique et sportive,no,Gym
